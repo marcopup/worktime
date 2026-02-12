@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Time Importer</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9fa;
+        }
+        
+        .upload-area.dragover {
+            background: #e7f0ff;
+            border-color: #4CAF50;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .data-display {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .data-row:last-child {
+            border-bottom: none;
+        }
+        
+        .day-name {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .time-data {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .hours {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .week-info {
+            text-align: center;
+            font-size: 18px;
+            color: #495057;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 4px;
+            background: #e9ecef;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Work Time Importer</h1>
+        <p class="subtitle">Photo Upload + Auto OCR</p>
+        
+        <div id="uploadArea" class="upload-area">
+            <div class="upload-icon">📷</div>
+            <p><strong>Take photo of watch screen</strong></p>
+            <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                Tap to upload or drag & drop
+            </p>
+            <input type="file" id="fileInput" accept="image/*" capture="environment">
+        </div>
+        
+        <img id="previewImage" class="preview-image">
+        
+        <div id="progress" class="progress">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="weekInfo" class="week-info"></div>
+        
+        <div id="dataDisplay" class="data-display"></div>
+        
+        <button id="importBtn" onclick="importToSheets()" style="display: none;">
+            📥 Import to Google Sheets
+        </button>
+        
+        <button id="manualBtn" onclick="showManualInput()" style="display: none;">
+            ⌨️ Manual Entry Instead
+        </button>
+        
+        <div class="footer">
+            Auto-detects times from watch photo 📸
+        </div>
+    </div>
+
+    <script>
+        let parsedData = null;
+        let ocrWorker = null;
+        
+        // Initialize Tesseract
+        async function initOCR() {
+            if (!ocrWorker) {
+                ocrWorker = await Tesseract.createWorker('eng');
+            }
+        }
+        
+        // Setup file upload
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewImage = document.getElementById('previewImage');
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        });
+        
+        async function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewImage.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            
+            // Process with OCR
+            showStatus('🔍 Reading watch screen...', 'processing');
+            document.getElementById('progress').style.display = 'block';
+            
+            try {
+                await initOCR();
+                
+                const { data: { text } } = await ocrWorker.recognize(file, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            document.getElementById('progressBar').style.width = progress + '%';
+                        }
+                    }
+                });
+                
+                document.getElementById('progress').style.display = 'none';
+                
+                // Parse OCR text
+                parseOCRText(text);
+                
+            } catch (error) {
+                showStatus('❌ Error reading image: ' + error.message, 'error');
+                document.getElementById('progress').style.display = 'none';
+            }
+        }
+        
+        function parseOCRText(text) {
+            console.log('OCR Text:', text);
+            
+            try {
+                // Look for patterns like: MON 8:30-17:00
+                const dayPattern = /(MON|TUE|WED|THU|FRI)[:\s]*(\d{1,2}):?(\d{2})\s*-\s*(\d{1,2}):?(\d{2})/gi;
+                const matches = [...text.matchAll(dayPattern)];
+                
+                if (matches.length === 0) {
+                    showStatus('⚠️ Could not detect times. Please try manual entry.', 'error');
+                    document.getElementById('manualBtn').style.display = 'block';
+                    return;
+                }
+                
+                const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                const dayMap = {
+                    'MON': 'Monday',
+                    'TUE': 'Tuesday',
+                    'WED': 'Wednesday',
+                    'THU': 'Thursday',
+                    'FRI': 'Friday'
+                };
+                
+                const today = new Date();
+                const dayOfWeek = today.getDay();
+                const diff = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+                const monday = new Date(today);
+                monday.setDate(today.getDate() + diff);
+                const weekStart = monday.toISOString().split('T')[0];
+                
+                parsedData = {
+                    weekStart: weekStart,
+                    entries: []
+                };
+                
+                matches.forEach(match => {
+                    const dayShort = match[1].toUpperCase();
+                    const inHour = match[2].padStart(2, '0');
+                    const inMin = match[3];
+                    const outHour = match[4].padStart(2, '0');
+                    const outMin = match[5];
+                    
+                    const inTime = `${inHour}:${inMin}`;
+                    const outTime = `${outHour}:${outMin}`;
+                    
+                    // Calculate hours
+                    const inMins = parseInt(inHour) * 60 + parseInt(inMin);
+                    const outMins = parseInt(outHour) * 60 + parseInt(outMin);
+                    const diff = (outMins >= inMins) ? outMins - inMins : (24*60 - inMins + outMins);
+                    const hours = (diff / 60).toFixed(2);
+                    
+                    parsedData.entries.push({
+                        day: dayMap[dayShort],
+                        in: inTime,
+                        out: outTime,
+                        hours: hours
+                    });
+                });
+                
+                displayData();
+                showStatus('✅ Successfully read ' + parsedData.entries.length + ' days from photo!', 'success');
+                
+            } catch (error) {
+                showStatus('❌ Error parsing text: ' + error.message, 'error');
+                document.getElementById('manualBtn').style.display = 'block';
+            }
+        }
+        
+        function displayData() {
+            if (!parsedData) return;
+            
+            document.getElementById('weekInfo').textContent = `Week of ${parsedData.weekStart}`;
+            
+            let html = '';
+            parsedData.entries.forEach(entry => {
+                html += `
+                    <div class="data-row">
+                        <span class="day-name">${entry.day}</span>
+                        <span class="time-data">${entry.in} → ${entry.out}</span>
+                        <span class="hours">${entry.hours}h</span>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('dataDisplay').innerHTML = html;
+            document.getElementById('dataDisplay').style.display = 'block';
+            document.getElementById('importBtn').style.display = 'block';
+        }
+        
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            statusEl.style.display = 'block';
+        }
+        
+        async function importToSheets() {
+            if (!parsedData) {
+                showStatus('No data to import', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('importBtn');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+            
+            try {
+                const sheetsUrl = localStorage.getItem('sheetsWebhookUrl');
+                
+                if (!sheetsUrl) {
+                    const url = prompt('Enter your Google Sheets webhook URL (one-time setup):');
+                    if (url) {
+                        localStorage.setItem('sheetsWebhookUrl', url);
+                        await sendToSheets(url);
+                    } else {
+                        throw new Error('Google Sheets URL required');
+                    }
+                } else {
+                    await sendToSheets(sheetsUrl);
+                }
+                
+            } catch (error) {
+                showStatus('Import failed: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = '📥 Import to Google Sheets';
+            }
+        }
+        
+        async function sendToSheets(url) {
+            const rows = parsedData.entries.map(entry => [
+                parsedData.weekStart,
+                entry.day,
+                entry.in,
+                entry.out,
+                entry.hours
+            ]);
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ rows })
+            });
+            
+            showStatus('✅ Successfully imported to Google Sheets!', 'success');
+            document.getElementById('importBtn').textContent = '✓ Imported!';
+            
+            downloadCSV();
+        }
+        
+        function downloadCSV() {
+            let csv = 'Week Starting,Day,Check IN,Check OUT,Hours\n';
+            parsedData.entries.forEach(entry => {
+                csv += `${parsedData.weekStart},${entry.day},${entry.in},${entry.out},${entry.hours}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `WorkTime_${parsedData.weekStart}.csv`;
+            a.click();
+        }
+        
+        function showManualInput() {
+            alert('Manual entry feature coming soon! For now, please use the manual code entry method.');
+        }
+    </script>
+</body>
+</html>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .data-display {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .data-row:last-child {
+            border-bottom: none;
+        }
+        
+        .day-name {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .time-data {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .hours {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .week-info {
+            text-align: center;
+            font-size: 18px;
+            color: #495057;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Work Time Importer</h1>
+        <p class="subtitle">Garmin FR165 → Google Sheets</p>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="weekInfo" class="week-info"></div>
+        
+        <div id="dataDisplay" class="data-display" style="display: none;"></div>
+        
+        <button id="importBtn" onclick="importToSheets()" style="display: none;">
+            📥 Import to Google Sheets
+        </button>
+        
+        <div class="footer">
+            Auto-detects transfer code from watch 🕐
+        </div>
+    </div>
+
+    <script>
+        let parsedData = null;
+        
+        // Parse transfer code from URL hash
+        function parseTransferCode() {
+            const hash = window.location.hash.substring(1);
+            
+            if (!hash) {
+                showStatus('No transfer code found. Please enter your code from the watch.', 'info');
+                return;
+            }
+            
+            try {
+                // ULTRA SHORT format: M080170 (DayLetter + HH + m + HH + m)
+                // m encoding: 0=:00, 1=:30, 2=:15, 3=:45
+                
+                const year = new Date().getFullYear();
+                const today = new Date();
+                const dayOfWeek = today.getDay();
+                const diff = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+                const monday = new Date(today);
+                monday.setDate(today.getDate() + diff);
+                const weekStart = monday.toISOString().split('T')[0];
+                
+                const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                const dayLetters = ['M', 'T', 'W', 'R', 'F'];
+                
+                parsedData = {
+                    weekStart: weekStart,
+                    entries: []
+                };
+                
+                // Decode minutes helper
+                const decodeMin = (m) => {
+                    if (m === '0') return '00';
+                    if (m === '1') return '30';
+                    if (m === '2') return '15';
+                    if (m === '3') return '45';
+                    return m + '0'; // fallback
+                };
+                
+                // Parse day entries (each is: Letter + 3 chars IN + 3 chars OUT = 7 chars)
+                let pos = 0;
+                
+                while (pos < hash.length) {
+                    const dayLetter = hash[pos];
+                    const dayIndex = dayLetters.indexOf(dayLetter);
+                    
+                    if (dayIndex === -1) {
+                        pos++;
+                        continue;
+                    }
+                    
+                    // Check if enough characters left
+                    if (pos + 7 > hash.length) break;
+                    
+                    // Get IN time: HH + m (3 chars)
+                    const inHour = hash.substring(pos + 1, pos + 3);
+                    const inMinCode = hash[pos + 3];
+                    const inMin = decodeMin(inMinCode);
+                    
+                    // Get OUT time: HH + m (3 chars)
+                    const outHour = hash.substring(pos + 4, pos + 6);
+                    const outMinCode = hash[pos + 6];
+                    const outMin = decodeMin(outMinCode);
+                    
+                    const inTimeFormatted = (inHour === 'XX') ? '' : `${inHour}:${inMin}`;
+                    const outTimeFormatted = (outHour === 'XX') ? '' : `${outHour}:${outMin}`;
+                    
+                    // Calculate hours
+                    let hours = '';
+                    if (inTimeFormatted && outTimeFormatted) {
+                        const inMins = parseInt(inHour) * 60 + parseInt(inMin);
+                        const outMins = parseInt(outHour) * 60 + parseInt(outMin);
+                        const diff = (outMins >= inMins) ? outMins - inMins : (24*60 - inMins + outMins);
+                        hours = (diff / 60).toFixed(2);
+                    }
+                    
+                    parsedData.entries.push({
+                        day: days[dayIndex],
+                        in: inTimeFormatted,
+                        out: outTimeFormatted,
+                        hours: hours
+                    });
+                    
+                    pos += 7; // Move to next day entry (1 letter + 6 digits)
+                }
+                
+                displayData();
+                
+            } catch (error) {
+                showStatus('Error parsing transfer code: ' + error.message, 'error');
+            }
+        }
+        
+        function getWeekStartDate(year, week) {
+            const jan1 = new Date(year, 0, 1);
+            const daysOffset = (week - 1) * 7;
+            const weekStart = new Date(jan1.getTime() + daysOffset * 24 * 60 * 60 * 1000);
+            
+            // Adjust to Monday
+            const day = weekStart.getDay();
+            const diff = (day === 0 ? -6 : 1) - day;
+            weekStart.setDate(weekStart.getDate() + diff);
+            
+            return weekStart.toISOString().split('T')[0];
+        }
+        
+        function displayData() {
+            if (!parsedData) return;
+            
+            document.getElementById('weekInfo').textContent = `Week of ${parsedData.weekStart}`;
+            
+            let html = '';
+            parsedData.entries.forEach(entry => {
+                html += `
+                    <div class="data-row">
+                        <span class="day-name">${entry.day}</span>
+                        <span class="time-data">${entry.in || '--:--'} → ${entry.out || '--:--'}</span>
+                        <span class="hours">${entry.hours ? entry.hours + 'h' : '--'}</span>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('dataDisplay').innerHTML = html;
+            document.getElementById('dataDisplay').style.display = 'block';
+            document.getElementById('importBtn').style.display = 'block';
+            
+            showStatus('✓ Transfer code loaded successfully!', 'success');
+        }
+        
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            statusEl.style.display = 'block';
+        }
+        
+        async function importToSheets() {
+            if (!parsedData) {
+                showStatus('No data to import', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('importBtn');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+            
+            try {
+                // Check if Google Sheets URL is configured
+                const sheetsUrl = localStorage.getItem('sheetsWebhookUrl');
+                
+                if (!sheetsUrl) {
+                    // First time setup - prompt for Google Sheets webhook URL
+                    const url = prompt('Enter your Google Sheets webhook URL (one-time setup):');
+                    if (url) {
+                        localStorage.setItem('sheetsWebhookUrl', url);
+                        await sendToSheets(url);
+                    } else {
+                        throw new Error('Google Sheets URL required');
+                    }
+                } else {
+                    await sendToSheets(sheetsUrl);
+                }
+                
+            } catch (error) {
+                showStatus('Import failed: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = '📥 Import to Google Sheets';
+            }
+        }
+        
+        async function sendToSheets(url) {
+            // Format data for Google Sheets
+            const rows = parsedData.entries.map(entry => [
+                parsedData.weekStart,
+                entry.day,
+                entry.in,
+                entry.out,
+                entry.hours
+            ]);
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ rows })
+            });
+            
+            showStatus('✓ Successfully imported to Google Sheets!', 'success');
+            document.getElementById('importBtn').textContent = '✓ Imported!';
+            
+            // Download CSV as backup
+            downloadCSV();
+        }
+        
+        function downloadCSV() {
+            let csv = 'Week Starting,Day,Check IN,Check OUT,Hours\n';
+            parsedData.entries.forEach(entry => {
+                csv += `${parsedData.weekStart},${entry.day},${entry.in},${entry.out},${entry.hours}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `WorkTime_${parsedData.weekStart}.csv`;
+            a.click();
+        }
+        
+        // Auto-parse on load
+        window.addEventListener('load', parseTransferCode);
+    </script>
+</body>
+</html>
